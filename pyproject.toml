@@ -31,5 +31,11 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
+    "mypy>=1.16.1",
     "pre-commit>=4.2.0",
+    "types-toml>=0.10.8.20240310",
 ]
+
+[[tool.mypy.overrides]]
+module = "dynaconf.*"
+ignore_missing_imports = true

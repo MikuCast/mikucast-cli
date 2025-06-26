@@ -4,8 +4,7 @@ import questionary
 from rich import print
 
 from .config import ConfigManager
-from .constants import DEFAULT_PROVIDERS
-from .llm_providers import LLMProvider, get_provider_instance
+from .llm_providers import PROVIDER_CONFIGS, LLMProvider, get_provider_instance
 
 
 class InteractiveSetup:
@@ -23,9 +22,22 @@ class InteractiveSetup:
         """
         print("👋 Welcome to MikuCast CLI! Let's set up your LLM provider.")
 
+        provider_choices = [
+            # Use .capitalize() for a nicer display name (e.g., "Openai" -> "OpenAI")
+            questionary.Choice(title=key.capitalize(), value=key)
+            for key in PROVIDER_CONFIGS.keys()
+        ]
+
+        # 3. Add the special "Customize" option with a helpful description
+        provider_choices.append(
+            questionary.Choice(
+                title="Customize (for other OpenAI-compatible APIs)", value="customize"
+            )
+        )
+
         provider_key = questionary.select(
             "Choose your LLM provider:",
-            choices=list(DEFAULT_PROVIDERS.keys()),
+            choices=provider_choices,
             use_indicator=True,
         ).ask()
 
@@ -33,8 +45,7 @@ class InteractiveSetup:
             print("[yellow]Setup cancelled. No provider selected.[/yellow]")
             return
 
-        provider_config_template = DEFAULT_PROVIDERS[provider_key]
-        base_url = provider_config_template.get("base_url")
+        base_url = PROVIDER_CONFIGS[provider_key].base_url
 
         if not base_url:
             # 如果是自定义或预设中没有 base_url，则要求用户输入

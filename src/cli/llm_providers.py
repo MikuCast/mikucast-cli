@@ -4,9 +4,34 @@ from typing import Any
 
 import httpx
 from loguru import logger
+from pydantic import BaseModel, Field
 from rich import print
 
-from .constants import DEFAULT_PROVIDERS, HTTP_TIMEOUT, MODELS_ENDPOINT
+from .constants import HTTP_TIMEOUT, MODELS_ENDPOINT
+
+
+class ProviderConfig(BaseModel):
+    """Defines the configuration for a single LLM provider."""
+
+    base_url: str | None = None
+    auth_header_prefix: str = "Bearer"
+    additional_headers: dict[str, str] | None = Field(default_factory=dict)
+
+
+PROVIDER_CONFIGS: dict[str, ProviderConfig] = {
+    "openai": ProviderConfig(
+        base_url="https://api.openai.com/v1", auth_header_prefix="Bearer"
+    ),
+    "gemini": ProviderConfig(
+        base_url="https://generativelanguage.googleapis.com/v1beta",
+        auth_header_prefix="Bearer",
+    ),
+    "anthropic": ProviderConfig(
+        base_url="https://api.anthropic.com/v1",
+        auth_header_prefix="X-API-Key",
+        additional_headers={"anthropic-version": "2023-06-01"},
+    ),
+}
 
 
 class LLMProvider(abc.ABC):
@@ -25,9 +50,7 @@ class LLMProvider(abc.ABC):
         self._base_url = base_url.rstrip("/") if base_url else ""
         self._api_key = api_key
         self._auth_header_prefix = auth_header_prefix
-        self._additional_headers = (
-            additional_headers if additional_headers is not None else {}
-        )
+        self._additional_headers = additional_headers or {}
 
     def _get_api_headers(self) -> dict[str, str]:
         """
@@ -37,7 +60,6 @@ class LLMProvider(abc.ABC):
         headers = self._additional_headers.copy()
         if self._api_key:
             headers["Authorization"] = f"{self._auth_header_prefix} {self._api_key}"
-        # 移除值为空的头，避免发送无用的Header
         return {k: v for k, v in headers.items() if v}
 
     @abc.abstractmethod
@@ -56,20 +78,16 @@ class LLMProvider(abc.ABC):
         if not self._base_url:
             logger.warning("Base URL is not set for provider, cannot fetch models.")
             return []
-
         url = f"{self._base_url}{MODELS_ENDPOINT}"
         headers = self._get_api_headers()
-
         print(f"Fetching models from [bold blue]{url}[/bold blue]...")
         logger.info(f"Attempting to fetch models from {url}")
-
         try:
             with httpx.Client(timeout=HTTP_TIMEOUT) as client:
                 response = client.get(url, headers=headers)
-                response.raise_for_status()  # 针对 4xx/5xx 响应抛出 HTTPStatusError
+                response.raise_for_status()
                 data = response.json()
                 models = self._parse_models_response(data)
-
                 if not models:
                     print(
                         "[bold yellow]Warning: API returned an empty list of models or an unexpected format.[/bold yellow]"
@@ -80,8 +98,6 @@ class LLMProvider(abc.ABC):
                 else:
                     print(f"[green]Found {len(models)} models.[/green]")
                     logger.info(f"Successfully fetched {len(models)} models.")
-
-                # 使用 set 去重，然后转换为 list 并排序
                 return sorted(list(set(models)))
         except httpx.HTTPStatusError as e:
             print(
@@ -93,10 +109,10 @@ class LLMProvider(abc.ABC):
         except httpx.RequestError as e:
             print(f"[bold red]Network Error fetching models from {url}: {e}[/bold red]")
             logger.error(f"Network Error fetching models from {url}: {e}")
-        except ValueError as e:  # 捕获 json.JSONDecodeError (ValueError 的子类)
+        except ValueError as e:
             print(f"[bold red]Invalid JSON response from {url}: {e}[/bold red]")
             logger.error(f"Invalid JSON response from {url}: {e}")
-        except Exception as e:  # 捕获其他所有未预料的错误
+        except Exception as e:
             print(
                 f"[bold red]An unexpected error occurred while fetching models: {e}[/bold red]"
             )
@@ -111,12 +127,15 @@ class OpenAIProvider(LLMProvider):
     """OpenAI LLM 提供商的具体实现。"""
 
     def __init__(self, base_url: str, api_key: str | None):
+        config = PROVIDER_CONFIGS["openai"]
         super().__init__(
-            base_url, api_key, DEFAULT_PROVIDERS["openai"]["auth_header_prefix"]
+            base_url=base_url,
+            api_key=api_key,
+            auth_header_prefix=config.auth_header_prefix,
+            additional_headers=config.additional_headers,
         )
 
     def _parse_models_response(self, response_data: dict[str, Any]) -> list[str]:
-        """解析 OpenAI API 的模型列表响应。"""
         return [m["id"] for m in response_data.get("data", []) if m and "id" in m]
 
 
@@ -124,13 +143,15 @@ class GeminiProvider(LLMProvider):
     """Gemini LLM 提供商的具体实现。"""
 
     def __init__(self, base_url: str, api_key: str | None):
+        config = PROVIDER_CONFIGS["gemini"]
         super().__init__(
-            base_url, api_key, DEFAULT_PROVIDERS["gemini"]["auth_header_prefix"]
+            base_url=base_url,
+            api_key=api_key,
+            auth_header_prefix=config.auth_header_prefix,
+            additional_headers=config.additional_headers,
         )
 
     def _parse_models_response(self, response_data: dict[str, Any]) -> list[str]:
-        """解析 Gemini API 的模型列表响应。"""
-        # 假设 Gemini API 的模型列表在 "models" 键下，且模型ID为 "name"
         return [m["name"] for m in response_data.get("models", []) if m and "name" in m]
 
 
@@ -138,18 +159,15 @@ class AnthropicProvider(LLMProvider):
     """Anthropic LLM 提供商的具体实现。"""
 
     def __init__(self, base_url: str, api_key: str | None):
+        config = PROVIDER_CONFIGS["anthropic"]
         super().__init__(
-            base_url,
-            api_key,
-            DEFAULT_PROVIDERS["anthropic"]["auth_header_prefix"],
-            DEFAULT_PROVIDERS["anthropic"]["additional_headers"],
+            base_url=base_url,
+            api_key=api_key,
+            auth_header_prefix=config.auth_header_prefix,
+            additional_headers=config.additional_headers,
         )
 
     def _parse_models_response(self, response_data: dict[str, Any]) -> list[str]:
-        """解析 Anthropic API 的模型列表响应。"""
-        # 注意：Anthropic 的 /v1/models 端点行为可能与 OpenAI 不同，
-        # 实际上它可能返回的是单个模型对象而非列表，或者需要不同的端点。
-        # 此处假设其行为类似 OpenAI，如果实际 API 不同，需要进一步调整。
         return [m["id"] for m in response_data.get("data", []) if m and "id" in m]
 
 
@@ -162,14 +180,8 @@ class CustomProvider(LLMProvider):
         super().__init__(base_url, api_key, auth_header_prefix)
 
     def _parse_models_response(self, response_data: dict[str, Any]) -> list[str]:
-        """
-        解析自定义 LLM 提供商的模型列表响应。
-        尝试从多种常见结构中提取模型 ID (例如，直接的列表，或在 'data' 键下)。
-        """
         model_ids: set[str] = set()
-
         if isinstance(response_data, list):
-            # 如果响应是直接的模型列表
             for item in response_data:
                 if isinstance(item, dict):
                     if "id" in item and isinstance(item["id"], str):
@@ -177,7 +189,6 @@ class CustomProvider(LLMProvider):
                     elif "name" in item and isinstance(item["name"], str):
                         model_ids.add(item["name"])
         elif isinstance(response_data, dict):
-            # 如果响应是一个字典，可能包含 "data" 或 "models" 键
             for key in ["data", "models"]:
                 if key in response_data and isinstance(response_data[key], list):
                     for item in response_data[key]:
@@ -186,13 +197,10 @@ class CustomProvider(LLMProvider):
                                 model_ids.add(item["id"])
                             elif "name" in item and isinstance(item["name"], str):
                                 model_ids.add(item["name"])
-
         if not model_ids:
             logger.warning(
-                "Custom provider response structure unknown. Could not parse models. "
-                f"Raw response keys: {response_data.keys() if isinstance(response_data, dict) else 'N/A'}"
+                f"Custom provider response structure unknown. Could not parse models. Raw response keys: {response_data.keys() if isinstance(response_data, dict) else 'N/A'}"
             )
-
         return sorted(list(model_ids))
 
 
@@ -202,14 +210,23 @@ def get_provider_instance(
     """
     工厂函数：根据提供商键返回相应的 LLMProvider 实例。
     """
-    if provider_key == "openai":
-        return OpenAIProvider(base_url, api_key)
-    elif provider_key == "gemini":
-        return GeminiProvider(base_url, api_key)
-    elif provider_key == "anthropic":
-        return AnthropicProvider(base_url, api_key)
+    provider_map = {
+        "openai": OpenAIProvider,
+        "gemini": GeminiProvider,
+        "anthropic": AnthropicProvider,
+        "customize": CustomProvider,
+    }
+
+    if provider_key in provider_map:
+        # Get the provider class from the map
+        provider_class = provider_map[provider_key]
+
+        # Get the default base_url from the config if the provided one is empty
+        final_base_url = base_url or PROVIDER_CONFIGS[provider_key].base_url or ""
+
+        return provider_class(final_base_url, api_key)
+
     elif provider_key == "customize":
-        # 对于自定义提供商，目前默认 Bearer，未来可以扩展让用户输入前缀
         return CustomProvider(base_url, api_key)
     else:
         logger.error(f"Unknown LLM provider key: {provider_key}")
