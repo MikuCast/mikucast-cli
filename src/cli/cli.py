@@ -34,6 +34,13 @@ def main_callback(ctx: typer.Context):
     用于执行全局初始化和配置检查。
     """
     logger.info(f"CLI application started. Command: {ctx.invoked_subcommand}")
+    # 在执行 'setup' 或 'config' 命令时，跳过自动设置流程
+    if ctx.invoked_subcommand in ["setup", "config"]:
+        logger.debug(
+            f"Skipping initial validation for '{ctx.invoked_subcommand}' command."
+        )
+        return
+
     config_manager.reload()
     if not config_manager.validate():
         print(
