@@ -1,7 +1,6 @@
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import questionary
-from loguru import logger
 from rich import print
 
 from .config import ConfigManager
@@ -58,11 +57,11 @@ class InteractiveSetup:
             "Enter API Key (can be optional for local models):"
         ).ask()
 
-        llm_provider_instance: Optional[LLMProvider] = get_provider_instance(
+        llm_provider_instance: LLMProvider | None = get_provider_instance(
             provider_key, base_url, api_key
         )
 
-        models: List[str] = []
+        models: list[str] = []
         if llm_provider_instance:
             models = llm_provider_instance.fetch_models()
         else:
@@ -70,7 +69,7 @@ class InteractiveSetup:
                 "[bold red]Error: Could not initialize LLM provider. Cannot fetch models.[/bold red]"
             )
 
-        model_name: Optional[str] = None
+        model_name: str | None = None
         if models:
             model_name = questionary.select(
                 "Select a default model to use:", choices=models, use_indicator=True
@@ -88,7 +87,7 @@ class InteractiveSetup:
             return
 
         # 构建要保存的配置数据结构，确保符合 Dynaconf 的环境嵌套格式
-        config_to_save: Dict[str, Any] = {
+        config_to_save: dict[str, Any] = {
             "default": {
                 "model": {
                     "base_url": base_url,
@@ -96,7 +95,7 @@ class InteractiveSetup:
                 }
             }
         }
-        secrets_to_save: Dict[str, Any] = {
+        secrets_to_save: dict[str, Any] = {
             "default": {
                 "model": {
                     "api_key": api_key or "",

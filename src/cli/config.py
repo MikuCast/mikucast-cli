@@ -1,7 +1,4 @@
-import json
-import sys
-from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 from urllib.parse import urlparse
 
 import toml
@@ -94,7 +91,7 @@ class ConfigManager:
         """
         return is_valid_url(url)
 
-    def save_config(self, config_data: Dict[str, Any], secrets_data: Dict[str, Any]):
+    def save_config(self, config_data: dict[str, Any], secrets_data: dict[str, Any]):
         """
         将配置和秘密分别写入对应的 TOML 文件。
         确保只保存默认环境下的配置到文件。
@@ -123,7 +120,7 @@ class ConfigManager:
             print(f"\n❌ An unexpected error occurred while saving configuration: {e}")
             logger.error(f"Unexpected error saving configuration: {e}", exc_info=True)
 
-    def get_current_settings(self) -> Dict[str, Any]:
+    def get_current_settings(self) -> dict[str, Any]:
         """返回当前加载的设置作为字典。"""
         # Dynaconf.as_dict() 默认返回当前环境的配置
         return self.settings.as_dict(env=self.settings.current_env)

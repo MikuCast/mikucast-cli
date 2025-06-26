@@ -2,11 +2,13 @@
 import asyncio
 import json
 import sys
-from typing import Optional
 
 import questionary
 import typer
 from loguru import logger
+from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.providers.openai import OpenAIProvider
 from rich import print
 
 # 导入重构后的模块
@@ -17,10 +19,6 @@ from .interactive import InteractiveSetup
 # 配置 Loguru，移除默认 handler，添加 stderr handler
 logger.remove()
 logger.add(sys.stderr, level=LOGGING_LEVEL)
-
-from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIModel
-from pydantic_ai.providers.openai import OpenAIProvider
 
 app = typer.Typer(
     help="MikuCast CLI - Your Intelligent Agent Framework.",
@@ -55,9 +53,9 @@ def main_callback(ctx: typer.Context):
 
 
 def _get_configured_agent(
-    model_name_override: Optional[str],
-    base_url_override: Optional[str],
-    api_key_override: Optional[str],
+    model_name_override: str | None,
+    base_url_override: str | None,
+    api_key_override: str | None,
 ) -> Agent:
     """
     根据当前配置和可选的 CLI 覆盖参数，获取一个配置好的 Agent 实例。
@@ -88,9 +86,7 @@ def _get_configured_agent(
                 f"Applying CLI override: [bold yellow]model.base_url={base_url_override}[/bold yellow]"
             )
         if api_key_override:
-            print(
-                f"Applying CLI override: [bold yellow]model.api_key=***[/bold yellow]"
-            )
+            print("Applying CLI override: [bold yellow]model.api_key=***[/bold yellow]")
 
         try:
             llm_provider = OpenAIProvider(
@@ -122,13 +118,13 @@ def _get_configured_agent(
 @app.command()
 def ask(  # <-- Changed to synchronous 'def'
     question: str = typer.Argument(..., help="The question to ask the AI agent."),
-    model_name: Optional[str] = typer.Option(
+    model_name: str | None = typer.Option(
         None, "--model", help="Override the default LLM model name."
     ),
-    base_url: Optional[str] = typer.Option(
+    base_url: str | None = typer.Option(
         None, "--url", help="Override the default LLM base URL."
     ),
-    api_key: Optional[str] = typer.Option(
+    api_key: str | None = typer.Option(
         None, "--key", help="Override the default LLM API Key."
     ),
 ):
@@ -160,13 +156,13 @@ def ask(  # <-- Changed to synchronous 'def'
 
 @app.command()
 def chat(  # <-- Changed to synchronous 'def'
-    model_name: Optional[str] = typer.Option(
+    model_name: str | None = typer.Option(
         None, "--model", help="Override the default LLM model name."
     ),
-    base_url: Optional[str] = typer.Option(
+    base_url: str | None = typer.Option(
         None, "--url", help="Override the default LLM base URL."
     ),
-    api_key: Optional[str] = typer.Option(
+    api_key: str | None = typer.Option(
         None, "--key", help="Override the default LLM API Key."
     ),
 ):
@@ -221,13 +217,13 @@ def shell(  # <-- Changed to synchronous 'def'
         is_flag=True,
         show_default=False,
     ),
-    model_name: Optional[str] = typer.Option(
+    model_name: str | None = typer.Option(
         None, "--model", help="Override the default LLM model name."
     ),
-    base_url: Optional[str] = typer.Option(
+    base_url: str | None = typer.Option(
         None, "--url", help="Override the default LLM base URL."
     ),
-    api_key: Optional[str] = typer.Option(
+    api_key: str | None = typer.Option(
         None, "--key", help="Override the default LLM API Key."
     ),
 ):

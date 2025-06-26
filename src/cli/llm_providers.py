@@ -1,6 +1,6 @@
 # mikucast/llm_providers.py
 import abc
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 import httpx
 from loguru import logger
@@ -18,9 +18,9 @@ class LLMProvider(abc.ABC):
     def __init__(
         self,
         base_url: str,
-        api_key: Optional[str],
+        api_key: str | None,
         auth_header_prefix: str,
-        additional_headers: Optional[Dict[str, str]] = None,
+        additional_headers: dict[str, str] | None = None,
     ):
         self._base_url = base_url.rstrip("/") if base_url else ""
         self._api_key = api_key
@@ -29,7 +29,7 @@ class LLMProvider(abc.ABC):
             additional_headers if additional_headers is not None else {}
         )
 
-    def _get_api_headers(self) -> Dict[str, str]:
+    def _get_api_headers(self) -> dict[str, str]:
         """
         构造 API 请求所需的 HTTP 头。
         包含授权头和任何额外的提供商特定头。
@@ -41,14 +41,14 @@ class LLMProvider(abc.ABC):
         return {k: v for k, v in headers.items() if v}
 
     @abc.abstractmethod
-    def _parse_models_response(self, response_data: Dict[str, Any]) -> List[str]:
+    def _parse_models_response(self, response_data: dict[str, Any]) -> list[str]:
         """
         抽象方法：解析 API 响应数据，提取模型 ID 列表。
         不同的提供商可能有不同的响应结构。
         """
         pass
 
-    def fetch_models(self) -> List[str]:
+    def fetch_models(self) -> list[str]:
         """
         从 LLM 提供商 API 获取模型列表。
         处理 HTTP 请求、错误和通用响应解析。
@@ -110,12 +110,12 @@ class LLMProvider(abc.ABC):
 class OpenAIProvider(LLMProvider):
     """OpenAI LLM 提供商的具体实现。"""
 
-    def __init__(self, base_url: str, api_key: Optional[str]):
+    def __init__(self, base_url: str, api_key: str | None):
         super().__init__(
             base_url, api_key, DEFAULT_PROVIDERS["openai"]["auth_header_prefix"]
         )
 
-    def _parse_models_response(self, response_data: Dict[str, Any]) -> List[str]:
+    def _parse_models_response(self, response_data: dict[str, Any]) -> list[str]:
         """解析 OpenAI API 的模型列表响应。"""
         return [m["id"] for m in response_data.get("data", []) if m and "id" in m]
 
@@ -123,12 +123,12 @@ class OpenAIProvider(LLMProvider):
 class GeminiProvider(LLMProvider):
     """Gemini LLM 提供商的具体实现。"""
 
-    def __init__(self, base_url: str, api_key: Optional[str]):
+    def __init__(self, base_url: str, api_key: str | None):
         super().__init__(
             base_url, api_key, DEFAULT_PROVIDERS["gemini"]["auth_header_prefix"]
         )
 
-    def _parse_models_response(self, response_data: Dict[str, Any]) -> List[str]:
+    def _parse_models_response(self, response_data: dict[str, Any]) -> list[str]:
         """解析 Gemini API 的模型列表响应。"""
         # 假设 Gemini API 的模型列表在 "models" 键下，且模型ID为 "name"
         return [m["name"] for m in response_data.get("models", []) if m and "name" in m]
@@ -137,7 +137,7 @@ class GeminiProvider(LLMProvider):
 class AnthropicProvider(LLMProvider):
     """Anthropic LLM 提供商的具体实现。"""
 
-    def __init__(self, base_url: str, api_key: Optional[str]):
+    def __init__(self, base_url: str, api_key: str | None):
         super().__init__(
             base_url,
             api_key,
@@ -145,7 +145,7 @@ class AnthropicProvider(LLMProvider):
             DEFAULT_PROVIDERS["anthropic"]["additional_headers"],
         )
 
-    def _parse_models_response(self, response_data: Dict[str, Any]) -> List[str]:
+    def _parse_models_response(self, response_data: dict[str, Any]) -> list[str]:
         """解析 Anthropic API 的模型列表响应。"""
         # 注意：Anthropic 的 /v1/models 端点行为可能与 OpenAI 不同，
         # 实际上它可能返回的是单个模型对象而非列表，或者需要不同的端点。
@@ -157,16 +157,16 @@ class CustomProvider(LLMProvider):
     """自定义 LLM 提供商的具体实现。"""
 
     def __init__(
-        self, base_url: str, api_key: Optional[str], auth_header_prefix: str = "Bearer"
+        self, base_url: str, api_key: str | None, auth_header_prefix: str = "Bearer"
     ):
         super().__init__(base_url, api_key, auth_header_prefix)
 
-    def _parse_models_response(self, response_data: Dict[str, Any]) -> List[str]:
+    def _parse_models_response(self, response_data: dict[str, Any]) -> list[str]:
         """
         解析自定义 LLM 提供商的模型列表响应。
         尝试从多种常见结构中提取模型 ID (例如，直接的列表，或在 'data' 键下)。
         """
-        model_ids: Set[str] = set()
+        model_ids: set[str] = set()
 
         if isinstance(response_data, list):
             # 如果响应是直接的模型列表
@@ -197,8 +197,8 @@ class CustomProvider(LLMProvider):
 
 
 def get_provider_instance(
-    provider_key: str, base_url: str, api_key: Optional[str]
-) -> Optional[LLMProvider]:
+    provider_key: str, base_url: str, api_key: str | None
+) -> LLMProvider | None:
     """
     工厂函数：根据提供商键返回相应的 LLMProvider 实例。
     """
