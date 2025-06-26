@@ -10,7 +10,10 @@ requires-python = ">=3.12"
 dependencies = []
 
 [project.scripts]
-mikucast-cli = "mikucast_cli:main"
+mikucast = "cli.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cli"]
 
 [build-system]
 requires = ["hatchling"]
