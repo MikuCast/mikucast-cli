@@ -53,13 +53,18 @@ class ConfigManager:
             # 定义配置验证器
             validators=[
                 # 确保 model.model_name 和 model.base_url 存在且不为空
-                Validator("model.model_name", "model.base_url", must_exist=True, ne=""),
+                Validator(
+                    "model.provider.model_name",
+                    "model.provider.base_url",
+                    must_exist=True,
+                    ne="",
+                ),
                 # 验证 model.base_url 必须是有效的 URL
                 Validator(
-                    "model.base_url",
+                    "model.provider.base_url",
                     condition=is_valid_url,
                     messages={
-                        "condition": "model.base_url must be a valid and complete URL (e.g., https://api.openai.com/v1)"
+                        "condition": "model.provider.base_url must be a valid and complete URL (e.g., https://api.openai.com/v1)"
                     },
                 ),
             ],

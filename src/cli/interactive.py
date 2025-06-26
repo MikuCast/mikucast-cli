@@ -45,7 +45,13 @@ class InteractiveSetup:
             print("[yellow]Setup cancelled. No provider selected.[/yellow]")
             return
 
-        base_url = PROVIDER_CONFIGS[provider_key].base_url
+        base_url_default = ""
+        if provider_key != "customize":
+            base_url_default = PROVIDER_CONFIGS[provider_key].base_url or ""
+
+        base_url = questionary.text(
+            "Enter the base URL for the API:", default=base_url_default
+        ).ask()
 
         if not base_url:
             # 如果是自定义或预设中没有 base_url，则要求用户输入
@@ -101,15 +107,19 @@ class InteractiveSetup:
         config_to_save: dict[str, Any] = {
             "default": {
                 "model": {
-                    "base_url": base_url,
-                    "model_name": model_name,
+                    "provider": {
+                        "base_url": base_url,
+                        "model_name": model_name,
+                    }
                 }
             }
         }
         secrets_to_save: dict[str, Any] = {
             "default": {
                 "model": {
-                    "api_key": api_key or "",
+                    "provider": {
+                        "api_key": api_key or "",
+                    }
                 }
             }
         }

@@ -61,9 +61,9 @@ def _get_configured_agent(
     根据当前配置和可选的 CLI 覆盖参数，获取一个配置好的 Agent 实例。
     """
     with config_manager.settings.using_env(config_manager.settings.current_env):
-        current_model_name = config_manager.settings.model.model_name
-        current_base_url = config_manager.settings.model.base_url
-        current_api_key = config_manager.settings.model.api_key
+        current_model_name = config_manager.settings.model.provider.model_name
+        current_base_url = config_manager.settings.model.provider.base_url
+        current_api_key = config_manager.settings.model.provider.api_key
 
         final_model_name = (
             model_name_override

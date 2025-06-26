@@ -29,7 +29,6 @@ PROVIDER_CONFIGS: dict[str, ProviderConfig] = {
     "anthropic": ProviderConfig(
         base_url="https://api.anthropic.com/v1",
         auth_header_prefix="X-API-Key",
-        additional_headers={"anthropic-version": "2023-06-01"},
     ),
 }
 
