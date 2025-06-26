@@ -7,10 +7,20 @@ authors = [
     { name = "MikuCast", email = "mikucast.official@gmail.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "dynaconf>=3.2.11",
+    "httpx>=0.28.1",
+    "loguru>=0.7.3",
+    "pydantic>=2.11.7",
+    "pydantic-ai-slim[openai]>=0.3.4",
+    "questionary>=2.1.0",
+    "rich>=14.0.0",
+    "toml>=0.10.2",
+    "typer>=0.16.0",
+]
 
 [project.scripts]
-mikucast = "cli.cli:main"
+mikucast = "cli.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/cli"]
