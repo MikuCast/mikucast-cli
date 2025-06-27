@@ -66,8 +66,8 @@ class InteractiveSetup:
 
     def _select_provider(self) -> str | None:
         """Asks the user to select an LLM provider."""
-        provider_choices = list(self._settings.providers.keys())
-        provider_choices.append("custom")
+        provider_choices = ["custom"]
+        provider_choices.extend([p for p in list(self._settings.providers.keys()) if p != "custom"])
 
         selected_provider = questionary.select(
             "Choose your LLM provider:",
@@ -117,6 +117,10 @@ class InteractiveSetup:
             base_config = (
                 base_config.model_dump() if hasattr(base_config, "model_dump") else {}
             )
+
+        # Remove conflicting keys that are being passed explicitly
+        base_config.pop("base_url", None)
+        base_config.pop("api_key", None)
 
         return ProviderSettings(
             base_url=base_url,

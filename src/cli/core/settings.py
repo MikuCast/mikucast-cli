@@ -24,8 +24,8 @@ class LogSettings(BaseModel):
 
 
 class LLMSettings(BaseModel):
-    provider: str = Field("openai", description="The key of the selected provider.")
-    name: str = Field("gpt-4.1-mini", description="The name of the model to use.")
+    provider: str = Field("", description="The key of the selected provider.")
+    name: str = Field("", description="The name of the model to use.")
 
 
 class ProviderSettings(BaseModel):
