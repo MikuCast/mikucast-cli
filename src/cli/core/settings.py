@@ -24,8 +24,8 @@ class LogSettings(BaseModel):
 
 
 class LLMSettings(BaseModel):
-    provider: str = Field("", description="The key of the selected provider.")
-    name: str = Field("", description="The name of the model to use.")
+    provider: str | None = Field(None, description="The key of the selected provider.")
+    name: str | None = Field(None, description="The name of the model to use.")
 
 
 class ProviderSettings(BaseModel):

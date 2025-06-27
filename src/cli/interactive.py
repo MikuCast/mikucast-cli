@@ -14,7 +14,7 @@ from rich.console import Console
 
 from .core import constants
 from .core.context import AppContext
-from .core.settings import ProviderSettings, settings
+from .core.settings import AppSettings, ProviderSettings, load_settings, settings
 from .llm_providers import GenericLLMProvider
 
 console = Console()
@@ -29,7 +29,7 @@ class InteractiveSetup:
         self._settings = self._ctx.settings
         self._logger = self._ctx.logger
 
-    def run_setup(self):
+    def run_setup(self) -> AppSettings:
         """Guides the user through the full interactive setup process."""
         console.print("👋 Welcome to MikuCast CLI! Let's set up your LLM provider.")
 
@@ -62,12 +62,14 @@ class InteractiveSetup:
         console.print(
             "\n[bold green]✅ Setup complete![/bold green] Your settings have been saved."
         )
-        console.print("Please re-run your desired command.")
+        return load_settings()
 
     def _select_provider(self) -> str | None:
         """Asks the user to select an LLM provider."""
         provider_choices = ["custom"]
-        provider_choices.extend([p for p in list(self._settings.providers.keys()) if p != "custom"])
+        provider_choices.extend(
+            [p for p in list(self._settings.providers.keys()) if p != "custom"]
+        )
 
         selected_provider = questionary.select(
             "Choose your LLM provider:",
@@ -179,4 +181,3 @@ class InteractiveSetup:
 
         except OSError as e:
             console.print(f"\n[bold red]Error saving configuration:[/bold red] {e}")
-

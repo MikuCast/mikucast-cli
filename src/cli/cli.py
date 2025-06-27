@@ -29,7 +29,6 @@ app = typer.Typer(
     help="MikuCast CLI - Your Intelligent Agent Framework.",
     add_completion=False,
     rich_markup_mode="markdown",
-    no_args_is_help=True,
 )
 config_app = typer.Typer(help="Manage configuration.")
 app.add_typer(config_app, name="config")
@@ -37,46 +36,68 @@ app.add_typer(config_app, name="config")
 # --- CLI Commands ---
 
 
+def is_config_valid(current_settings: AppSettings) -> bool:
+    """Checks if the application configuration is present and minimally valid."""
+    # 使用 hasattr 来安全地检查，防止因不完整的对象而引发 AttributeError
+    if (
+        hasattr(current_settings, "model")
+        and current_settings.model
+        and hasattr(current_settings.model, "name")
+        and current_settings.model.name
+        and hasattr(current_settings.model, "provider")
+        and current_settings.model.provider
+    ):
+        return True
+    return False
+
+
 @app.callback(invoke_without_command=True)
 def main(ctx: typer.Context):
-    """Main callback. Handles initial checks and displays a welcome message."""
-    if ctx.invoked_subcommand is None:
-        try:
-            welcome_text = Text.from_markup(
-                f"Welcome to [bold magenta]MikuCast CLI[/bold magenta]!\nActive Model: [green]{settings.model.name}[/green] via Provider: [green]{settings.model.provider}[/green]"
+    """
+    Gatekeeper: Checks config. If invalid, it "marks" the context so that
+    subsequent commands know they need to run setup first.
+    """
+    if not is_config_valid(settings) and ctx.invoked_subcommand != "config":
+        # 配置无效，并且不是在运行 config 命令
+        # 我们在 context.obj 中放入一个特殊标记，告诉其他函数需要设置
+        ctx.obj = {"needs_setup": True}
+        console.print(
+            Panel(
+                "[bold yellow]Configuration is missing or invalid.[/bold yellow]\nLet's get you set up first!",
+                title="🔧 Configuration Required 🔧",
+                border_style="yellow",
             )
-            console.print(
-                Panel(
-                    welcome_text,
-                    title="✨ Status ✨",
-                    border_style="blue",
-                    expand=False,
-                )
-            )
-            console.print(
-                "Use `[bold]mikucast --help[/bold]` to see available commands."
-            )
-        except Exception:
-            console.print(
-                "[bold yellow]Configuration is not set.[/bold yellow] Run `mikucast setup`."
-            )
-    elif ctx.invoked_subcommand not in ["config"]:
-        try:
-            # We only validate settings here, context is created in async command
-            _ = AppSettings.model_validate(settings.model_dump())
-        except Exception as e:
-            console.print(
-                f"[bold red]Configuration Error:[/bold red] {e}\nPlease run `[bold cyan]mikucast config setup[/bold cyan]` to configure the application."
-            )
-            raise typer.Exit(1)
+        )
+    else:
+        ctx.obj = {"needs_setup": False, "settings": settings}
+
+
+def ensure_valid_settings(ctx: typer.Context) -> AppSettings:
+    """
+    Checks the context. If setup is needed, runs it and returns the new settings.
+    Otherwise, returns the existing valid settings.
+    """
+    context_data = ctx.obj
+    if context_data.get("needs_setup"):
+        # 需要运行设置
+        setup_instance = InteractiveSetup()
+        new_settings = setup_instance.run_setup()
+        console.print("\n[bold cyan]Resuming your original command...[/bold cyan]\n")
+        return new_settings
+    else:
+        return context_data.get("settings")
 
 
 @app.command()
-def ask(question: str = typer.Argument(..., help="The question to ask the AI agent.")):
+def ask(
+    ctx: typer.Context,
+    question: str = typer.Argument(..., help="The question to ask the AI agent."),
+):
     """Ask the agent a single question and get a direct answer."""
 
-    # Use a standard synchronous 'with' block to manage the AppContext
-    with AppContext(settings=settings) as app_context:
+    current_settings = ensure_valid_settings(ctx)
+
+    with AppContext(settings=current_settings) as app_context:
         app_context.logger.info(f"Executing 'ask' command with question: '{question}'")
 
         # The core async logic is kept in its own function
@@ -110,7 +131,9 @@ def ask(question: str = typer.Argument(..., help="The question to ask the AI age
 def chat():
     """Start an interactive chat session with the AI agent."""
 
-    with AppContext(settings=settings) as app_context:
+    current_settings = ensure_valid_settings(ctx)
+
+    with AppContext(settings=current_settings) as app_context:
         model_name = app_context.settings.model.name
         provider_name = app_context.settings.model.provider
 
@@ -168,13 +191,8 @@ def chat():
 @config_app.command("setup")
 def config_setup():
     """Run the interactive setup to configure the application."""
-    try:
-        setup_instance = InteractiveSetup()
-        setup_instance.run_setup()
-    except Exception as e:
-        console.print(f"\n[bold red]An error occurred during setup:[/bold red] {e}")
-        # We may not have a logger here, so print to console
-        print(f"Setup failed: {e}")
+    setup_instance = InteractiveSetup()
+    setup_instance.run_setup()
 
 
 @config_app.command("list")
@@ -203,5 +221,9 @@ def config_list():
     console.print(json.dumps(config_dict, indent=2))
 
 
-def main():
+def run_app():
     app()
+
+
+if __name__ == "__main__":
+    run_app()
