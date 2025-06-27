@@ -12,6 +12,7 @@ import json
 
 import questionary
 import typer
+from pydantic import config
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
@@ -30,19 +31,19 @@ app = typer.Typer(
     rich_markup_mode="markdown",
     no_args_is_help=True,
 )
+config_app = typer.Typer(help="Manage configuration.")
+app.add_typer(config_app, name="config")
 
 # --- CLI Commands ---
 
 
-# main callback remains the same...
 @app.callback(invoke_without_command=True)
 def main(ctx: typer.Context):
     """Main callback. Handles initial checks and displays a welcome message."""
     if ctx.invoked_subcommand is None:
         try:
             welcome_text = Text.from_markup(
-                f"Welcome to [bold magenta]MikuCast CLI[/bold magenta]!\n"
-                f"Active Model: [green]{settings.model.name}[/green] via Provider: [green]{settings.model.provider}[/green]"
+                f"Welcome to [bold magenta]MikuCast CLI[/bold magenta]!\nActive Model: [green]{settings.model.name}[/green] via Provider: [green]{settings.model.provider}[/green]"
             )
             console.print(
                 Panel(
@@ -59,14 +60,13 @@ def main(ctx: typer.Context):
             console.print(
                 "[bold yellow]Configuration is not set.[/bold yellow] Run `mikucast setup`."
             )
-    elif ctx.invoked_subcommand not in ["setup", "config"]:
+    elif ctx.invoked_subcommand not in ["config"]:
         try:
             # We only validate settings here, context is created in async command
             _ = AppSettings.model_validate(settings.model_dump())
         except Exception as e:
             console.print(
-                f"[bold red]Configuration Error:[/bold red] {e}\n"
-                "Please run `[bold cyan]mikucast setup[/bold cyan]` to configure the application."
+                f"[bold red]Configuration Error:[/bold red] {e}\nPlease run `[bold cyan]mikucast config setup[/bold cyan]` to configure the application."
             )
             raise typer.Exit(1)
 
@@ -110,13 +110,27 @@ def ask(question: str = typer.Argument(..., help="The question to ask the AI age
 def chat():
     """Start an interactive chat session with the AI agent."""
 
-    # This part is synchronous setup
-    console.print(
-        "\n[bold blue]Starting interactive chat. (Press Ctrl+D or type 'exit' to end)[/bold blue]"
-    )
-
     with AppContext(settings=settings) as app_context:
-        app_context.logger.info("Chat context created.")
+        model_name = app_context.settings.model.name
+        provider_name = app_context.settings.model.provider
+
+        # 2. 创建一个美观的信息面板
+        info_text = Text.from_markup(
+            f"Model: [bold green]{model_name}[/bold green]\n"
+            f"Provider: [bold green]{provider_name}[/bold green]\n\n"
+            "Type your message and press Enter. Use 'exit' or Ctrl+D to quit."
+        )
+        console.print(
+            Panel(
+                info_text,
+                title="✨ Interactive Chat Session ✨",
+                border_style="blue",
+                expand=False,
+            )
+        )
+        app_context.logger.info(
+            f"Starting chat session with model: {model_name} via {provider_name}"
+        )
 
         # The async logic remains inside its own function
         async def _run_chat_async():
@@ -151,8 +165,8 @@ def chat():
             console.print("\n[bold blue]Chat session ended.[/bold blue]")
 
 
-@app.command()
-def setup():
+@config_app.command("setup")
+def config_setup():
     """Run the interactive setup to configure the application."""
     try:
         setup_instance = InteractiveSetup()
@@ -163,8 +177,8 @@ def setup():
         print(f"Setup failed: {e}")
 
 
-@app.command()
-def config():
+@config_app.command("list")
+def config_list():
     """Display the current application configuration."""
     # This command is synchronous, so we don't need the async context
     app_context = AppContext(settings=settings)
@@ -189,10 +203,5 @@ def config():
     console.print(json.dumps(config_dict, indent=2))
 
 
-# main and __main__ block remain the same
 def main():
     app()
-
-
-if __name__ == "__main__":
-    main()
