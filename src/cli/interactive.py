@@ -1,128 +1,178 @@
+"""
+Handles the interactive setup process for MikuCast CLI.
+
+This module guides the user through configuring their LLM provider and model,
+leveraging the dependency injection system to access necessary services.
+"""
+
 from typing import Any
 
 import questionary
-from rich import print
+import toml
+from pydantic import HttpUrl
+from rich.console import Console
 
-from .config import ConfigManager
-from .llm_providers import PROVIDER_CONFIGS, LLMProvider, get_provider_instance
+from .core import constants
+from .core.context import AppContext
+from .core.settings import ProviderSettings, settings
+from .llm_providers import GenericLLMProvider
+
+console = Console()
 
 
 class InteractiveSetup:
-    """
-    负责MikuCast的交互式设置流程。
-    依赖于 ConfigManager 和 LLMProvider 工厂函数。
-    """
+    """Manages the interactive setup and configuration of the CLI."""
 
-    def __init__(self, config_mgr: ConfigManager):
-        self._config_mgr = config_mgr
+    def __init__(self):
+        # Create a temporary context for the setup process
+        self._ctx = AppContext(settings=settings)
+        self._settings = self._ctx.settings
+        self._logger = self._ctx.logger
 
     def run_setup(self):
-        """
-        引导用户进行交互式配置。
-        """
-        print("👋 Welcome to MikuCast CLI! Let's set up your LLM provider.")
+        """Guides the user through the full interactive setup process."""
+        console.print("👋 Welcome to MikuCast CLI! Let's set up your LLM provider.")
 
-        provider_choices = [
-            # Use .capitalize() for a nicer display name (e.g., "Openai" -> "OpenAI")
-            questionary.Choice(title=key.capitalize(), value=key)
-            for key in PROVIDER_CONFIGS.keys()
-        ]
+        # --- Provider Selection ---
+        provider_key = self._select_provider()
+        if not provider_key:
+            return
 
-        # 3. Add the special "Customize" option with a helpful description
-        provider_choices.append(
-            questionary.Choice(
-                title="Customize (for other OpenAI-compatible APIs)", value="customize"
-            )
+        # --- Base URL Configuration ---
+        base_url = self._configure_base_url(provider_key)
+        if not base_url:
+            return
+
+        # --- API Key Configuration ---
+        api_key = questionary.password(
+            "Enter your API Key (optional, press Enter to skip):"
+        ).ask()
+
+        # --- Model Selection ---
+        provider_config_for_fetch = self._build_temp_provider_config(
+            provider_key, base_url, api_key
         )
+        model_name = self._select_model(provider_config_for_fetch)
+        if not model_name:
+            return
 
-        provider_key = questionary.select(
+        # --- Save Configuration ---
+        self._save_configuration(provider_key, base_url, model_name, api_key)
+
+        console.print(
+            "\n[bold green]✅ Setup complete![/bold green] Your settings have been saved."
+        )
+        console.print("Please re-run your desired command.")
+
+    def _select_provider(self) -> str | None:
+        """Asks the user to select an LLM provider."""
+        provider_choices = list(self._settings.providers.keys())
+        provider_choices.append("custom")
+
+        selected_provider = questionary.select(
             "Choose your LLM provider:",
             choices=provider_choices,
             use_indicator=True,
         ).ask()
 
-        if not provider_key:
-            print("[yellow]Setup cancelled. No provider selected.[/yellow]")
-            return
+        if not selected_provider:
+            console.print("[yellow]Setup cancelled. No provider selected.[/yellow]")
+            return None
+        return selected_provider
 
-        base_url_default = ""
-        if provider_key != "customize":
-            base_url_default = PROVIDER_CONFIGS[provider_key].base_url or ""
+    def _configure_base_url(self, provider_key: str) -> HttpUrl | None:
+        """Asks the user for the provider's base URL."""
+        default_url = ""
+        if provider_key != "custom":
+            default_url = str(self._settings.providers[provider_key].base_url)
 
-        base_url = questionary.text(
-            "Enter the base URL for the API:", default=base_url_default
-        ).ask()
+        while True:
+            url_str = questionary.text(
+                "Enter the API base URL:", default=default_url
+            ).ask()
 
-        if not base_url:
-            # 如果是自定义或预设中没有 base_url，则要求用户输入
-            while True:
-                base_url = questionary.text(
-                    "Enter the Base URL for your provider:"
-                ).ask()
-                if not base_url:
-                    print("[yellow]Base URL not provided. Setup cancelled.[/yellow]")
-                    return
-                # 即时验证 URL
-                if self._config_mgr.validate_url_input(base_url):
-                    break
-                else:
-                    print(
-                        "[bold red]Invalid URL. Please enter a valid HTTP/HTTPS URL.[/bold red]"
-                    )
+            if not url_str:
+                console.print("[yellow]Setup cancelled. Base URL is required.[/yellow]")
+                return None
+            try:
+                # Validate the URL with Pydantic
+                return HttpUrl(url_str)
+            except ValueError:
+                console.print(
+                    "[bold red]Invalid URL.[/bold red] Please enter a complete URL (e.g., 'https://api.example.com')."
+                )
 
-        api_key = questionary.password(
-            "Enter API Key (can be optional for local models):"
-        ).ask()
-
-        llm_provider_instance: LLMProvider | None = get_provider_instance(
-            provider_key, base_url, api_key
+    def _build_temp_provider_config(
+        self, provider_key: str, base_url: HttpUrl, api_key: str | None
+    ) -> ProviderSettings:
+        """Creates a temporary ProviderSettings object for fetching models."""
+        # Get defaults from the selected provider, or create a blank slate for 'custom'
+        base_config = (
+            self._settings.providers.get(provider_key, {})
+            if provider_key != "custom"
+            else {}
         )
-
-        models: list[str] = []
-        if llm_provider_instance:
-            models = llm_provider_instance.fetch_models()
-        else:
-            print(
-                "[bold red]Error: Could not initialize LLM provider. Cannot fetch models.[/bold red]"
+        # Ensure base_config is a dict for unpacking
+        if not isinstance(base_config, dict):
+            base_config = (
+                base_config.model_dump() if hasattr(base_config, "model_dump") else {}
             )
 
-        model_name: str | None = None
-        if models:
+        return ProviderSettings(
+            base_url=base_url,
+            api_key=api_key,
+            # Carry over other settings like headers, endpoints, etc.
+            **base_config,
+        )
+
+    def _select_model(self, provider_config: ProviderSettings) -> str | None:
+        """Fetches and asks the user to select a model."""
+        provider_instance = GenericLLMProvider(
+            config=provider_config, logger=self._logger
+        )
+        models = provider_instance.fetch_models()
+
+        if not models:
+            console.print(
+                "\n[bold yellow]⚠️ Could not automatically fetch model list.[/bold yellow]"
+            )
+            model_name = questionary.text(
+                "Please manually enter the model name you want to use:",
+            ).ask()
+        else:
             model_name = questionary.select(
                 "Select a default model to use:", choices=models, use_indicator=True
             ).ask()
-        else:
-            print(
-                "\n⚠️ Could not fetch model list from the provided API. You may need to manually enter the model name."
-            )
-            model_name = questionary.text(
-                "Please manually enter a default model name:"
-            ).ask()
 
         if not model_name:
-            print("[yellow]Model name not provided. Setup cancelled.[/yellow]")
-            return
+            console.print("[yellow]Setup cancelled. No model selected.[/yellow]")
+            return None
+        return model_name
 
-        # 构建要保存的配置数据结构，确保符合 Dynaconf 的环境嵌套格式
-        config_to_save: dict[str, Any] = {
-            "default": {
-                "model": {
-                    "provider": {
-                        "base_url": base_url,
-                        "model_name": model_name,
-                    }
-                }
-            }
-        }
-        secrets_to_save: dict[str, Any] = {
-            "default": {
-                "model": {
-                    "provider": {
-                        "api_key": api_key or "",
-                    }
-                }
-            }
+    def _save_configuration(
+        self, provider: str, base_url: HttpUrl, model_name: str, api_key: str | None
+    ):
+        """Saves the chosen configuration to the user's settings files."""
+        # --- Prepare settings for user's settings.toml ---
+        user_settings = {
+            "model": {"provider": provider, "name": model_name},
+            "providers": {
+                provider: {"base_url": str(base_url)}  # Only save the URL override
+            },
         }
 
-        self._config_mgr.save_config(config_to_save, secrets_to_save)
-        print("Please re-run your desired command with the new configuration.")
+        # --- Prepare secrets for user's .secrets.toml ---
+        user_secrets = {"providers": {provider: {"api_key": api_key or ""}}}
+
+        try:
+            # Write to the main settings file
+            with open(constants.SETTINGS_FILE_PATH, "w", encoding="utf-8") as f:
+                toml.dump(user_settings, f)
+
+            # Write to the secrets file
+            with open(constants.SECRETS_FILE_PATH, "w", encoding="utf-8") as f:
+                toml.dump(user_secrets, f)
+
+        except OSError as e:
+            console.print(f"\n[bold red]Error saving configuration:[/bold red] {e}")
+

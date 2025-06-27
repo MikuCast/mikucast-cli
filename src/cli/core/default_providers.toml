@@ -1,0 +1,35 @@
+# Default LLM provider configurations for MikuCast CLI
+# This file defines the built-in providers. The structure here must match
+# the AppSettings Pydantic model.
+
+[providers.openai]
+# Fetches models from: https://api.openai.com/v1/models
+base_url = "https://api.openai.com/v1"
+auth_header_prefix = "Bearer"
+models_endpoint = "/models"
+models_response_path = "data"
+model_id_key = "id"
+
+[providers.gemini]
+# Fetches models from: https://generativelanguage.googleapis.com/v1beta/models
+base_url = "https://generativelanguage.googleapis.com/v1beta"
+auth_header_prefix = "Bearer"
+models_endpoint = "/models"
+models_response_path = "models"
+model_id_key = "name"
+
+[providers.anthropic]
+# Fetches models from: https://api.anthropic.com/v1/models
+base_url = "https://api.anthropic.com/v1"
+auth_header_prefix = "X-API-Key"
+models_endpoint = "/models"
+models_response_path = "data"
+model_id_key = "id"
+
+[providers.ollama]
+# Example for a local Ollama instance.
+base_url = "http://localhost:11434/api"
+auth_header_prefix = ""
+models_endpoint = "/tags"
+models_response_path = "models"
+model_id_key = "name"
