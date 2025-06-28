@@ -51,6 +51,20 @@ def is_config_valid(current_settings: AppSettings) -> bool:
     return False
 
 
+def ensure_valid_settings(ctx: typer.Context) -> AppSettings:
+    """
+    Checks the context. If setup is needed, runs it and returns the new settings.
+    Otherwise, returns the existing valid settings.
+    """
+    context_data = ctx.obj
+    if context_data.get("needs_setup"):
+        setup_instance = InteractiveSetup()
+        new_settings = setup_instance.run_setup()
+        return new_settings
+    else:
+        return context_data.get("settings")
+
+
 @app.callback(invoke_without_command=True)
 def main(ctx: typer.Context):
     """
@@ -58,8 +72,6 @@ def main(ctx: typer.Context):
     subsequent commands know they need to run setup first.
     """
     if not is_config_valid(settings) and ctx.invoked_subcommand != "config":
-        # 配置无效，并且不是在运行 config 命令
-        # 我们在 context.obj 中放入一个特殊标记，告诉其他函数需要设置
         ctx.obj = {"needs_setup": True}
         console.print(
             Panel(
@@ -70,22 +82,7 @@ def main(ctx: typer.Context):
         )
     else:
         ctx.obj = {"needs_setup": False, "settings": settings}
-
-
-def ensure_valid_settings(ctx: typer.Context) -> AppSettings:
-    """
-    Checks the context. If setup is needed, runs it and returns the new settings.
-    Otherwise, returns the existing valid settings.
-    """
-    context_data = ctx.obj
-    if context_data.get("needs_setup"):
-        # 需要运行设置
-        setup_instance = InteractiveSetup()
-        new_settings = setup_instance.run_setup()
-        console.print("\n[bold cyan]Resuming your original command...[/bold cyan]\n")
-        return new_settings
-    else:
-        return context_data.get("settings")
+    ensure_valid_settings(ctx)
 
 
 @app.command()
@@ -128,7 +125,9 @@ def ask(
 
 
 @app.command()
-def chat():
+def chat(
+    ctx: typer.Context,
+):
     """Start an interactive chat session with the AI agent."""
 
     current_settings = ensure_valid_settings(ctx)
